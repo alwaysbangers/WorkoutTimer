@@ -1,21 +1,21 @@
 {
-     "name": "workout-timer",
-     "version": "1.0.0",
-     "main": "expo/AppEntry.js",
-     "scripts": {
-          "start": "expo start",
-          "android": "expo start --android"
-     },
-     "dependencies": {
-          "expo": "~52.0.0",
-          "expo-av": "~15.0.0",
-          "expo-status-bar": "~2.0.0",
-          "react": "18.3.1",
-          "react-native": "0.76.3",
-          "react-native-svg": "15.8.0"
-     },
-     "devDependencies": {
-          "@babel/core": "^7.25.0"
-     },
-     "private": true
+  "name": "workout-timer",
+  "version": "1.0.0",
+  "main": "expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android"
+  },
+  "dependencies": {
+    "expo": "~52.0.0",
+    "expo-av": "~15.0.0",
+    "expo-status-bar": "~2.0.0",
+    "react": "18.3.1",
+    "react-native": "0.76.3",
+    "react-native-svg": "15.8.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0"
+  },
+  "private": true
 }

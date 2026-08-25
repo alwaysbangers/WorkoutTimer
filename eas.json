@@ -1,13 +1,14 @@
 {
-     "cli": {
-          "version": ">= 12.0.0"
-     },
-     "build": {
-          "preview": {
-               "android": {
-                    "buildType": "apk"
-               },
-               "distribution": "internal"
-          }
-     }
+  "cli": {
+    "version": ">= 12.0.0",
+    "projectId": "52c3774d-1459-4b82-9059-354021d45a69"
+  },
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      },
+      "distribution": "internal"
+    }
+  }
 }
