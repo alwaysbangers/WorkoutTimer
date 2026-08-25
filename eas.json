@@ -7,7 +7,10 @@
       "android": {
         "buildType": "apk"
       },
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_NO_DOT_ENV": "1"
+      }
     }
   }
 }
