@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  StyleSheet, Text, View, TextInput, TouchableOpacity, Vibration, StatusBar, Dimensions, Switch, Animated, Alert
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  StatusBar,
+  Dimensions,
+  Switch,
+  Alert,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import Svg, { Circle } from 'react-native-svg';
@@ -20,105 +28,105 @@ export default function App() {
   const [playEvery2, setPlayEvery2] = useState(true);
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [countdown, setCountdown] = useState(5);
-  const [warningType, setWarningType] = useState(null); // '2min', '5min', '10min', 'end', or null
-  const [blockMessage, setBlockMessage] = useState('');
 
   const intervalRef = useRef(null);
   const countdownRef = useRef(null);
   const sounds = useRef({});
-  const playedRef = useRef({}); // Prevents double-triggering of sounds
-  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // تنظیم حالت صوتی برای اطمینان از پخش صدا حتی در حالت سایلنت
+  // ---------- تنظیم حالت صوتی و بارگذاری صداها ----------
   useEffect(() => {
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
-    });
-  }, []);
-
-  // انیمیشن پالس (تپش) دایره
-  useEffect(() => {
-    let animation;
-    if (warningType) {
-      animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.08, duration: 500, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-        ])
-      );
-      animation.start();
-    } else {
-      Animated.timing(pulseAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-      if (animation) animation.stop();
-    }
-    return () => { if (animation) animation.stop(); };
-  }, [warningType]);
-
-  // لود کردن صداها
-  useEffect(() => {
-    async function loadSounds() {
+    async function initAudio() {
       try {
-        const { sound: start } = await Audio.Sound.createAsync(require('./assets/sounds/start.mp3'), { shouldPlay: false });
-        const { sound: every2 } = await Audio.Sound.createAsync(require('./assets/sounds/every2.mp3'), { shouldPlay: false });
-        const { sound: every5 } = await Audio.Sound.createAsync(require('./assets/sounds/every5.mp3'), { shouldPlay: false });
-        const { sound: every10 } = await Audio.Sound.createAsync(require('./assets/sounds/every10.mp3'), { shouldPlay: false });
-        const { sound: end } = await Audio.Sound.createAsync(require('./assets/sounds/end.mp3'), { shouldPlay: false });
-
-        sounds.current = { start, every2, every5, every10, end };
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
       } catch (e) {
-        console.log('صداها لود نشدن', e);
+        console.warn('خطا در تنظیم حالت صوتی:', e);
+        Alert.alert('خطا', 'تنظیمات صوتی اعمال نشد: ' + e.message);
+      }
+
+      try {
+        const [start, every2, every5, every10, end] = await Promise.all([
+          (await Audio.Sound.createAsync(require('./assets/sounds/start.mp3'))).sound,
+          (await Audio.Sound.createAsync(require('./assets/sounds/every2.mp3'))).sound,
+          (await Audio.Sound.createAsync(require('./assets/sounds/every5.mp3'))).sound,
+          (await Audio.Sound.createAsync(require('./assets/sounds/every10.mp3'))).sound,
+          (await Audio.Sound.createAsync(require('./assets/sounds/end.mp3'))).sound,
+        ]);
+        sounds.current = { start, every2, every5, every10, end };
+        console.log('همه‌ی صداها با موفقیت بارگذاری شدند');
+      } catch (e) {
+        console.error('خطا در بارگذاری صداها:', e);
+        Alert.alert('خطا', 'صداهارو نتونستیم لود کنیم:\n' + e.message);
       }
     }
-    loadSounds();
+
+    initAudio();
+
     return () => {
       Object.values(sounds.current).forEach((s) => s?.unloadAsync());
     };
   }, []);
 
-  // تابع پخش صدای دوبل (تضمینی)
-  const playSoundTwice = async (type) => {
+  // ---------- تابع پخش صدا با مدیریت خطا ----------
+  const playSound = async (type) => {
     try {
       const sound = sounds.current[type];
-      if (!sound) return;
-
-      let playCount = 0;
-      const onPlaybackStatusUpdate = (status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          playCount++;
-          if (playCount < 2) {
-            sound.replayAsync(); // پخش بار دوم
-          } else {
-            sound.setOnPlaybackStatusUpdate(null); // پاکسازی
-          }
-        }
-      };
-
-      sound.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
+      if (!sound) {
+        throw new Error(`صدای "${type}" بارگذاری نشده است.`);
+      }
       await sound.setPositionAsync(0);
       await sound.playAsync();
+      return true;
     } catch (e) {
-      console.log('خطا در پخش صدا:', e);
+      console.error(`خطا در پخش صدای ${type}:`, e);
+      throw e;
     }
   };
 
-  const startCountdown = () => {
-    const mins = parseInt(minutes);
-    if (mins < 15) {
-      Alert.alert('خطا', 'زمان ورزش نمی‌تواند کمتر از ۱۵ دقیقه باشد.');
-      return;
+  // ---------- تست صدا ----------
+  const testSound = async () => {
+    try {
+      await playSound('start');
+      Alert.alert('✅ موفق', 'صدای "start" با موفقیت پخش شد.');
+    } catch (e) {
+      Alert.alert('❌ خطا', `پخش صدا ناموفق:\n${e.message}`);
     }
+  };
+
+  // ---------- شروع تایمر با شمارش معکوس (صدا بلافاصله پخش میشه) ----------
+  const handleStart = () => {
     setIsCountingDown(true);
     setCountdown(5);
     setIsFinished(false);
-    setWarningType(null);
 
+    // **پخش صدای شروع دو بار، بلافاصله بعد از زدن دکمه**
+    (async () => {
+      try {
+        await playSound('start');
+        // تاخیر ۳۰۰ میلی‌ثانیه برای پخش دوباره
+        setTimeout(async () => {
+          try {
+            await playSound('start');
+          } catch (e) {
+            console.warn('پخش دوم صدای start ناموفق:', e);
+          }
+        }, 300);
+      } catch (e) {
+        console.warn('پخش اول صدای start ناموفق:', e);
+      }
+    })();
+
+    // شروع شمارش معکوس ۵ ثانیه‌ای
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(countdownRef.current);
           setIsCountingDown(false);
+          // بعد از ۵ ثانیه، تایمر اصلی شروع میشه
           actuallyStartTimer();
           return 0;
         }
@@ -127,24 +135,22 @@ export default function App() {
     }, 1000);
   };
 
-  const actuallyStartTimer = async () => {
+  // ---------- شروع واقعی تایمر (بعد از شمارش معکوس) ----------
+  const actuallyStartTimer = () => {
     const mins = parseInt(minutes) || 15;
     const total = mins * 60;
     setTotalSeconds(total);
     setRemaining(total);
     setIsRunning(true);
-    playedRef.current = {}; // ریست کردن وضعیت پخش صداها
-    await playSoundTwice('start');
-    Vibration.vibrate(200);
   };
 
+  // ---------- توقف و ریست ----------
   const stopTimer = () => {
     clearInterval(intervalRef.current);
     clearInterval(countdownRef.current);
     setIsRunning(false);
     setIsCountingDown(false);
     setCountdown(5);
-    setWarningType(null);
   };
 
   const resetTimer = () => {
@@ -155,96 +161,42 @@ export default function App() {
     setRemaining(0);
     setIsFinished(false);
     setCountdown(5);
-    setWarningType(null);
-    setBlockMessage('');
   };
 
-  // منطق اصلی تایمر و هشدارها
+  // ---------- تایمر اصلی (پخش صداهای دوره‌ای) ----------
   useEffect(() => {
     if (isRunning && remaining > 0) {
       intervalRef.current = setInterval(() => {
-        setRemaining((prev) => prev - 1);
+        setRemaining((prev) => {
+          const next = prev - 1;
+          const elapsed = totalSeconds - next;
+
+          if (playEvery2 && next > 0 && elapsed % 120 === 0) {
+            playSound('every2').catch((e) => console.warn('every2 failed:', e));
+          }
+          if (next > 0 && elapsed % 300 === 0) {
+            playSound('every5').catch((e) => console.warn('every5 failed:', e));
+          }
+          if (next > 0 && elapsed % 600 === 0) {
+            playSound('every10').catch((e) => console.warn('every10 failed:', e));
+          }
+
+          if (next <= 0) {
+            clearInterval(intervalRef.current);
+            setIsRunning(false);
+            setIsFinished(true);
+            playSound('end').catch((e) => console.warn('end failed:', e));
+            return 0;
+          }
+          return next;
+        });
       }, 1000);
     }
+
     return () => clearInterval(intervalRef.current);
-  }, [isRunning]);
+  }, [isRunning, remaining, totalSeconds, playEvery2]);
 
-  // افکت جانبی برای بررسی شرایط پخش صدا و هشدارها در هر ثانیه
-  useEffect(() => {
-    if (!isRunning || remaining <= 0) return;
-
-    const elapsed = totalSeconds - remaining;
-    const blockElapsed = elapsed % 900; // زمان سپری شده در بلوک ۱۵ دقیقه‌ای فعلی (۰ تا ۸۹۹ ثانیه)
-    const totalBlocks = Math.ceil(totalSeconds / 900);
-    const currentBlock = Math.floor(elapsed / 900) + 1;
-    
-    // تعیین پیام نیمه اول/دوم
-    if (totalBlocks > 1) {
-      const isSecondHalf = currentBlock > (totalBlocks / 2);
-      setBlockMessage(isSecondHalf ? 'نیمه دوم' : 'نیمه اول');
-    } else {
-      setBlockMessage('');
-    }
-
-    // ریست کردن وضعیت پخش در شروع هر بلوک ۱۵ دقیقه‌ای
-    if (blockElapsed === 0) {
-      playedRef.current = {};
-    }
-
-    // هشدار و پخش صدای ۲ دقیقه
-    if (blockElapsed === 115 && !playedRef.current['warn2']) {
-      playedRef.current['warn2'] = true;
-      setWarningType('2min');
-    }
-    if (blockElapsed === 120 && playEvery2 && !playedRef.current['every2']) {
-      playedRef.current['every2'] = true;
-      setWarningType(null);
-      playSoundTwice('every2');
-      Vibration.vibrate(150);
-    }
-
-    // هشدار و پخش صدای ۵ دقیقه
-    if (blockElapsed === 295 && !playedRef.current['warn5']) {
-      playedRef.current['warn5'] = true;
-      setWarningType('5min');
-    }
-    if (blockElapsed === 300 && !playedRef.current['every5']) {
-      playedRef.current['every5'] = true;
-      setWarningType(null);
-      playSoundTwice('every5');
-      Vibration.vibrate([0, 200, 100, 200]);
-    }
-
-    // هشدار و پخش صدای ۱۰ دقیقه
-    if (blockElapsed === 595 && !playedRef.current['warn10']) {
-      playedRef.current['warn10'] = true;
-      setWarningType('10min');
-    }
-    if (blockElapsed === 600 && !playedRef.current['every10']) {
-      playedRef.current['every10'] = true;
-      setWarningType(null);
-      playSoundTwice('every10');
-      Vibration.vibrate([0, 300, 100, 300]);
-    }
-
-    // هشدار ۱۵ ثانیه‌ای قبل از پایان بلوک ۱۵ دقیقه‌ای (یا پایان کل تایمر)
-    if (remaining <= 15 && !playedRef.current['warnEnd']) {
-      playedRef.current['warnEnd'] = true;
-      setWarningType('end');
-    }
-
-    // پایان بلوک ۱۵ دقیقه‌ای (یا پایان کل تایمر)
-    if (remaining === 0 && !playedRef.current['end']) {
-      playedRef.current['end'] = true;
-      clearInterval(intervalRef.current);
-      setIsRunning(false);
-      setIsFinished(true);
-      setWarningType(null);
-      playSoundTwice('end');
-      Vibration.vibrate([0, 500, 200, 500]);
-    }
-  }, [remaining, isRunning, totalSeconds, playEvery2]);
-
+  // ---------- توابع کمکی ----------
   const formatTime = (sec) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
@@ -253,8 +205,8 @@ export default function App() {
 
   const progress = totalSeconds > 0 ? remaining / totalSeconds : 1;
   const strokeDashoffset = CIRCUMFERENCE * (1 - progress);
-  const isValidTime = parseInt(minutes) >= 15;
 
+  // ---------- رندر ----------
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0b1120" />
@@ -262,14 +214,22 @@ export default function App() {
       <Text style={styles.title}>تایمر ورزش</Text>
       <Text style={styles.subtitle}>تمرکز کن، زمان رو بسپار به من</Text>
 
-      <Animated.View style={[styles.circleContainer, { transform: [{ scale: pulseAnim }] }]}>
+      {/* دایره پیشرفت */}
+      <View style={styles.circleContainer}>
         <Svg width={SIZE} height={SIZE}>
-          <Circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} stroke="#1e293b" strokeWidth={STROKE_WIDTH} fill="none" />
           <Circle
             cx={SIZE / 2}
             cy={SIZE / 2}
             r={RADIUS}
-            stroke={isFinished ? '#4ade80' : (warningType ? '#fbbf24' : '#38bdf8')}
+            stroke="#1e293b"
+            strokeWidth={STROKE_WIDTH}
+            fill="none"
+          />
+          <Circle
+            cx={SIZE / 2}
+            cy={SIZE / 2}
+            r={RADIUS}
+            stroke={isFinished ? '#4ade80' : '#38bdf8'}
             strokeWidth={STROKE_WIDTH}
             fill="none"
             strokeDasharray={CIRCUMFERENCE}
@@ -283,33 +243,26 @@ export default function App() {
         <View style={styles.timeContainer}>
           {isCountingDown ? (
             <>
-              <Text style={styles.countdownText}>آماده‌باش</Text>
-              <Text style={styles.countdownNumber}>({countdown})</Text>
+              <Text style={styles.countdownText}>آماده‌سازی...</Text>
+              <Text style={styles.countdownNumber}>{countdown}</Text>
             </>
           ) : (
             <>
               <Text style={[styles.timer, isFinished && { color: '#4ade80' }]}>
                 {formatTime(remaining)}
               </Text>
-              {blockMessage ? <Text style={styles.blockText}>{blockMessage}</Text> : null}
-              {warningType === 'end' && remaining > 0 && (
-                <Text style={styles.warningText}>⚠️ ۱۵ ثانیه تا پایان</Text>
-              )}
-              {warningType === '2min' && <Text style={styles.warningText}>⚠️ ۵ ثانیه تا ۲ دقیقه</Text>}
-              {warningType === '5min' && <Text style={styles.warningText}>⚠️ ۵ ثانیه تا ۵ دقیقه</Text>}
-              {warningType === '10min' && <Text style={styles.warningText}>⚠️ ۵ ثانیه تا ۱۰ دقیقه</Text>}
-              
-              {isRunning && !warningType && <Text style={styles.runningText}>در حال اجرا...</Text>}
+              {isRunning && <Text style={styles.runningText}>در حال اجرا...</Text>}
               {isFinished && <Text style={styles.finishedText}>آفرین! 💪</Text>}
             </>
           )}
         </View>
-      </Animated.View>
+      </View>
 
+      {/* تنظیمات + دکمه‌ی تست صدا (فقط زمانی که تایمر در حال اجرا نیست) */}
       {!isRunning && !isCountingDown && remaining === 0 && !isFinished && (
         <View style={styles.settingsContainer}>
           <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>یادآوری صوتی هر 2 دقیقه</Text>
+            <Text style={styles.switchLabel}>صدای هر ۲ دقیقه</Text>
             <Switch
               value={playEvery2}
               onValueChange={setPlayEvery2}
@@ -324,29 +277,23 @@ export default function App() {
               style={styles.input}
               keyboardType="number-pad"
               value={minutes}
-              onChangeText={(text) => {
-                const numeric = text.replace(/[^0-9]/g, '');
-                setMinutes(numeric);
-              }}
+              onChangeText={setMinutes}
               maxLength={3}
               placeholder="15"
               placeholderTextColor="#64748b"
             />
-            {!isValidTime && minutes !== '' && (
-              <Text style={styles.errorText}>زمان ورزش نمی‌تواند کمتر از ۱۵ دقیقه باشد</Text>
-            )}
           </View>
+
+          <TouchableOpacity style={styles.testButton} onPress={testSound} activeOpacity={0.7}>
+            <Text style={styles.testButtonText}>🔊 تست صدا</Text>
+          </TouchableOpacity>
         </View>
       )}
 
+      {/* دکمه‌های اصلی */}
       <View style={styles.buttons}>
         {!isRunning && !isCountingDown ? (
-          <TouchableOpacity 
-            style={[styles.btnStart, !isValidTime && styles.btnDisabled]} 
-            onPress={startCountdown} 
-            activeOpacity={0.8}
-            disabled={!isValidTime}
-          >
+          <TouchableOpacity style={styles.btnStart} onPress={handleStart} activeOpacity={0.8}>
             <Text style={styles.btnText}>شروع</Text>
           </TouchableOpacity>
         ) : (
@@ -363,31 +310,157 @@ export default function App() {
   );
 }
 
+// ---------- استایل‌ها ----------
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0b1120', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  title: { fontSize: 28, fontWeight: '700', color: '#f1f5f9', marginBottom: 6 },
-  subtitle: { fontSize: 14, color: '#94a3b8', marginBottom: 40 },
-  circleContainer: { width: SIZE, height: SIZE, justifyContent: 'center', alignItems: 'center', marginBottom: 30 },
-  timeContainer: { position: 'absolute', alignItems: 'center' },
-  timer: { fontSize: 52, fontWeight: '300', color: '#38bdf8', fontVariant: ['tabular-nums'] },
-  blockText: { marginTop: 4, fontSize: 16, color: '#94a3b8', fontWeight: '600' },
-  warningText: { marginTop: 8, fontSize: 16, color: '#fbbf24', fontWeight: '700', textAlign: 'center' },
-  countdownText: { fontSize: 16, color: '#94a3b8', marginBottom: 8, textAlign: 'center' },
-  countdownNumber: { fontSize: 64, fontWeight: '300', color: '#fbbf24' },
-  runningText: { marginTop: 8, fontSize: 14, color: '#94a3b8' },
-  finishedText: { marginTop: 8, fontSize: 16, color: '#4ade80', fontWeight: '600' },
-  settingsContainer: { width: '100%', alignItems: 'center', marginBottom: 20 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1e293b', width: '85%', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: '#334155' },
-  switchLabel: { color: '#e2e8f0', fontSize: 16 },
-  inputContainer: { alignItems: 'center' },
-  label: { color: '#94a3b8', fontSize: 14, marginBottom: 10 },
-  input: { backgroundColor: '#1e293b', color: '#f1f5f9', fontSize: 28, width: 110, textAlign: 'center', borderRadius: 16, paddingVertical: 12, borderWidth: 1, borderColor: '#334155' },
-  errorText: { color: '#ef4444', fontSize: 13, marginTop: 8, textAlign: 'center' },
-  buttons: { flexDirection: 'row', gap: 16, marginTop: 10 },
-  btnStart: { backgroundColor: '#0ea5e9', paddingVertical: 16, paddingHorizontal: 48, borderRadius: 50, elevation: 4 },
-  btnDisabled: { backgroundColor: '#475569', opacity: 0.7 },
-  btnStop: { backgroundColor: '#ef4444', paddingVertical: 16, paddingHorizontal: 48, borderRadius: 50, elevation: 4 },
-  btnReset: { backgroundColor: '#1e293b', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 50, borderWidth: 1, borderColor: '#334155' },
-  btnText: { color: '#fff', fontSize: 17, fontWeight: '600' },
-  btnTextReset: { color: '#94a3b8', fontSize: 17, fontWeight: '500' },
+  container: {
+    flex: 1,
+    backgroundColor: '#0b1120',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#f1f5f9',
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#94a3b8',
+    marginBottom: 40,
+  },
+  circleContainer: {
+    width: SIZE,
+    height: SIZE,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  timeContainer: {
+    position: 'absolute',
+    alignItems: 'center',
+  },
+  timer: {
+    fontSize: 52,
+    fontWeight: '300',
+    color: '#38bdf8',
+    fontVariant: ['tabular-nums'],
+  },
+  countdownText: {
+    fontSize: 16,
+    color: '#94a3b8',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  countdownNumber: {
+    fontSize: 64,
+    fontWeight: '300',
+    color: '#fbbf24',
+  },
+  runningText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#94a3b8',
+  },
+  finishedText: {
+    marginTop: 8,
+    fontSize: 16,
+    color: '#4ade80',
+    fontWeight: '600',
+  },
+  settingsContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1e293b',
+    width: '85%',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  switchLabel: {
+    color: '#e2e8f0',
+    fontSize: 16,
+  },
+  inputContainer: {
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  label: {
+    color: '#94a3b8',
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  input: {
+    backgroundColor: '#1e293b',
+    color: '#f1f5f9',
+    fontSize: 28,
+    width: 110,
+    textAlign: 'center',
+    borderRadius: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  testButton: {
+    backgroundColor: '#2d3b52',
+    paddingVertical: 8,
+    paddingHorizontal: 22,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: '#475569',
+    marginTop: 4,
+    alignSelf: 'center',
+  },
+  testButtonText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 10,
+  },
+  btnStart: {
+    backgroundColor: '#0ea5e9',
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 50,
+    elevation: 4,
+  },
+  btnStop: {
+    backgroundColor: '#ef4444',
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 50,
+    elevation: 4,
+  },
+  btnReset: {
+    backgroundColor: '#1e293b',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 50,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  btnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  btnTextReset: {
+    color: '#94a3b8',
+    fontSize: 17,
+    fontWeight: '500',
+  },
 });
