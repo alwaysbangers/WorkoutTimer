@@ -19,8 +19,11 @@
       },
       "package": "com.my.workouttimer"
     },
-    "plugins": [
-      "expo-av"
-    ]
+    "plugins": ["expo-av"],
+    "extra": {
+      "eas": {
+        "projectId": "52c3774d-1459-4b82-9059-354021d45a69"
+      }
+    }
   }
 }
