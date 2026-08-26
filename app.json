@@ -19,7 +19,21 @@
       },
       "package": "com.my.workouttimer"
     },
-    "plugins": ["expo-av", "expo-file-system"],
+    "plugins": [
+      "expo-av",
+      "expo-file-system",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0",
+            "kotlinVersion": "1.9.24"
+          }
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "52c3774d-1459-4b82-9059-354021d45a69"
