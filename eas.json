@@ -11,6 +11,12 @@
       "env": {
         "EXPO_NO_DOT_ENV": "1"
       }
+    },
+    "preview-clean": {
+      "extends": "preview",
+      "cache": {
+        "disabled": true
+      }
     }
   }
 }
